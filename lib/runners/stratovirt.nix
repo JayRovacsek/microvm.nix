@@ -1,6 +1,7 @@
 { pkgs
 , microvmConfig
 , macvtapFds
+, macvlanFds
 }:
 
 let
@@ -125,6 +126,9 @@ in {
             ++ lib.optionals (type == "macvtap") [
               "fd=${toString macvtapFds.${id}}"
             ]
+            ++ lib.optionals (type == "macvlan") [
+              "fd=${toString macvlanFds.${id}}"
+            ]
           )
         )
         # TODO: devType (0x10 + i)
@@ -184,4 +188,5 @@ in {
     else throw "Cannot shutdown without socket";
 
   requiresMacvtapAsFds = true;
+  requiresMacvlanAsFds = true;
 }

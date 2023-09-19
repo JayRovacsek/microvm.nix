@@ -197,7 +197,7 @@ in
       type = with types; listOf (submodule {
         options = {
           type = mkOption {
-            type = enum [ "user" "tap" "macvtap" "bridge" ];
+            type = enum [ "user" "tap" "macvtap" "macvlan" "bridge" ];
             description = ''
               Interface type
             '';
@@ -212,7 +212,7 @@ in
             type = nullOr str;
             default = null;
             description = ''
-              Attach network interface to host interface for type = "macvlan"
+              Attach network interface to host interface for type = "macvtap"
             '';
           };
           macvtap.mode = mkOption {
@@ -220,6 +220,26 @@ in
             default = null;
             description = ''
               The MACVLAN mode to use
+            '';
+          };
+          macvlan.link = mkOption {
+            type = nullOr str;
+            default = null;
+            description = ''
+              Attach network interface to host interface for type = "macvlan"
+            '';
+          };
+          macvlan.mode = mkOption {
+            type = nullOr (enum ["private" "vepa" "bridge" "passthru" "source"]);
+            default = null;
+            description = ''
+              The MACVLAN mode to use
+            '';
+          };
+          macvlan.tag = mkOption {
+            type = number;
+            description = ''
+              The VLAN tag to apply
             '';
           };
           bridge = mkOption {

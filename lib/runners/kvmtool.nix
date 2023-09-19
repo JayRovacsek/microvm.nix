@@ -1,6 +1,7 @@
 { pkgs
 , microvmConfig
 , macvtapFds
+, macvlanFds
 }:
 
 let
@@ -55,6 +56,10 @@ in {
           "-n" (lib.escapeShellArg "mode=${type},tapif=${id},guest_mac=${mac}")
         ]
         else if type == "macvtap"
+        then [
+          "-n" "mode=tap,tapif=/dev/tap$(< /sys/class/net/${id}/ifindex),guest_mac=${mac}"
+        ]
+        else if type == "macvlan"
         then [
           "-n" "mode=tap,tapif=/dev/tap$(< /sys/class/net/${id}/ifindex),guest_mac=${mac}"
         ]

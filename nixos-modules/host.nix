@@ -324,6 +324,52 @@ in
         '';
       };
 
+      "microvm-macvlan-interfaces@" = {
+        description = "Setup MicroVM '%i' MACVLAN interfaces";
+        before = [ "microvm@%i.service" ];
+        partOf = [ "microvm@%i.service" ];
+        unitConfig.ConditionPathExists = "${stateDir}/%i/current/share/microvm/macvlan-interfaces";
+        restartIfChanged = false;
+        serviceConfig = {
+          Type = "oneshot";
+          RemainAfterExit = true;
+          ExecStop =
+            let
+              stopScript = pkgs.writeScript "stop-microvm-tap-interfaces" ''
+                #! ${pkgs.runtimeShell} -e
+                cd ${stateDir}/$1
+                cat current/share/microvm/macvlan-interfaces | while read -r line;do
+                  opts=( $line )
+                  id="''${opts[0]}"
+                  ${pkgs.iproute2}/bin/ip link del name $id
+                done
+              '';
+            in "${stopScript} %i";
+          SyslogIdentifier = "microvm-macvlan-interfaces@%i";
+        };
+        # `ExecStart`
+        scriptArgs = "%i";
+        script = ''
+          cd ${stateDir}/$1
+          i=0
+          cat current/share/microvm/macvlan-interfaces | while read -r line;do
+            opts=( $line )
+            id="''${opts[0]}"
+            mac="''${opts[1]}"
+            link="''${opts[2]}"
+            mode="''${opts[3]:+" mode ''${opts[3]}"}"
+            if [ -e /sys/class/net/$id ]; then
+              ${pkgs.iproute2}/bin/ip link del name $id
+            fi
+            ${pkgs.iproute2}/bin/ip link add link $link name $id address $mac type macvlan ''${mode[@]}
+            ${pkgs.iproute2}/bin/ip link set $id allmulticast on
+            echo 1 > /proc/sys/net/ipv6/conf/$id/disable_ipv6
+            ${pkgs.iproute2}/bin/ip link set $id up
+            ${pkgs.coreutils-full}/bin/chown ${user}:${group} /dev/tap$(< /sys/class/net/$id/ifindex)
+          done
+        '';
+      };
+
 
       "microvm-pci-devices@" = {
         description = "Setup MicroVM '%i' devices for passthrough";

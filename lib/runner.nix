@@ -1,16 +1,14 @@
-{ pkgs
-, microvmConfig
-, toplevel
-}:
-
+{ pkgs, microvmConfig, toplevel, }:
 let
   inherit (pkgs) lib writeScriptBin;
 
-  inherit (import ./. { nixpkgs-lib = lib; }) createVolumesScript makeMacvtap;
+  inherit (import ./. { nixpkgs-lib = lib; })
+    createVolumesScript makeMacvtap makeMacvlan;
   inherit (makeMacvtap microvmConfig) openMacvtapFds macvtapFds;
+  inherit (makeMacvlan microvmConfig) openMacvlanFds macvlanFds;
 
   hypervisorConfig = import (./runners + "/${microvmConfig.hypervisor}.nix") {
-    inherit pkgs microvmConfig macvtapFds;
+    inherit pkgs microvmConfig macvtapFds macvlanFds;
   };
 
   inherit (hypervisorConfig) command canShutdown shutdownCommand;
@@ -21,7 +19,10 @@ let
 
     ${preStart}
     ${createVolumesScript pkgs microvmConfig.volumes}
-    ${lib.optionalString (hypervisorConfig.requiresMacvtapAsFds or false) openMacvtapFds}
+    ${lib.optionalString (hypervisorConfig.requiresMacvtapAsFds or false)
+    openMacvtapFds}
+    ${lib.optionalString (hypervisorConfig.requiresMacvlanAsFds or false)
+    openMacvlanFds}
 
     exec ${command}
   '';
@@ -43,22 +44,19 @@ let
     SIZE=$1
     ${hypervisorConfig.setBalloonScript}
   '';
-in
-
-pkgs.runCommand "microvm-${microvmConfig.hypervisor}-${microvmConfig.hostName}"
-{
+in pkgs.runCommand
+"microvm-${microvmConfig.hypervisor}-${microvmConfig.hostName}" {
   # for `nix run`
   meta.mainProgram = "microvm-run";
-  passthru = {
-    inherit canShutdown;
-  };
+  passthru = { inherit canShutdown; };
 } ''
   mkdir -p $out/bin
 
   ln -s ${runScriptBin}/bin/microvm-run $out/bin/microvm-run
-  ${if canShutdown
-    then "ln -s ${shutdownScriptBin}/bin/microvm-shutdown $out/bin/microvm-shutdown"
-    else ""}
+  ${if canShutdown then
+    "ln -s ${shutdownScriptBin}/bin/microvm-shutdown $out/bin/microvm-shutdown"
+  else
+    ""}
   ${lib.optionalString ((hypervisorConfig.setBalloonScript or null) != null) ''
     ln -s ${balloonScriptBin}/bin/microvm-balloon $out/bin/microvm-balloon
   ''}
@@ -72,23 +70,38 @@ pkgs.runCommand "microvm-${microvmConfig.hypervisor}-${microvmConfig.hostName}"
     '') microvmConfig.interfaces}
 
   ${lib.concatMapStringsSep " " (interface:
-    lib.optionalString (interface.type == "macvtap" && interface ? id  && interface ? macvtap && interface.macvtap ? link) ''
-      echo "${builtins.concatStringsSep " " [
-        interface.id
-        interface.mac
-        interface.macvtap.link
-        (builtins.toString interface.macvtap.mode)
-      ]}" >> $out/share/microvm/macvtap-interfaces
-    '') microvmConfig.interfaces}
+    lib.optionalString (interface.type == "macvtap" && interface ? id
+      && interface ? macvtap && interface.macvtap ? link) ''
+        echo "${
+          builtins.concatStringsSep " " [
+            interface.id
+            interface.mac
+            interface.macvtap.link
+            (builtins.toString interface.macvtap.mode)
+          ]
+        }" >> $out/share/microvm/macvtap-interfaces
+      '') microvmConfig.interfaces}
+
+  ${lib.concatMapStringsSep " " (interface:
+    lib.optionalString (interface.type == "macvlan" && interface ? id
+      && interface ? macvlan && interface.macvlan ? link) ''
+        echo "${
+          builtins.concatStringsSep " " [
+            interface.id
+            interface.mac
+            interface.macvlan.link
+            (builtins.toString interface.macvlan.mode)
+          ]
+        }" >> $out/share/microvm/macvlan-interfaces
+      '') microvmConfig.interfaces}
 
 
   ${lib.concatMapStrings ({ tag, socket, source, proto, ... }:
-      lib.optionalString (proto == "virtiofs") ''
-        mkdir -p $out/share/microvm/virtiofs/${tag}
-        echo "${socket}" > $out/share/microvm/virtiofs/${tag}/socket
-        echo "${source}" > $out/share/microvm/virtiofs/${tag}/source
-      ''
-    ) microvmConfig.shares}
+    lib.optionalString (proto == "virtiofs") ''
+      mkdir -p $out/share/microvm/virtiofs/${tag}
+      echo "${socket}" > $out/share/microvm/virtiofs/${tag}/socket
+      echo "${source}" > $out/share/microvm/virtiofs/${tag}/source
+    '') microvmConfig.shares}
 
   ${lib.concatMapStrings ({ bus, path, ... }: ''
     echo "${path}" >> $out/share/microvm/${bus}-devices

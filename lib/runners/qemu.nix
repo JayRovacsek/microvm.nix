@@ -1,6 +1,7 @@
 { pkgs
 , microvmConfig
 , macvtapFds
+, macvlanFds
 }:
 
 let
@@ -168,6 +169,9 @@ in {
             ++ lib.optionals (type == "macvtap") [
               "fd=${toString macvtapFds.${id}}"
             ]
+            ++ lib.optionals (type == "macvlan") [
+              "fd=${toString macvlanFds.${id}}"
+            ]
           )
         )
         "-device" ("virtio-net-${devType},netdev=${id},mac=${mac}" +
@@ -258,4 +262,5 @@ in {
     else null;
 
   requiresMacvtapAsFds = true;
+  requiresMacvlanAsFds = true;
 }
